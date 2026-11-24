@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Well AI — локальный чатбот с кодом и картинками</title>
+  <meta name="description" content="Well AI — локальный Windows-чатбот, который пишет код и генерирует картинки. Установка одним кликом.">
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #141b31;
+      --panel2: #1b2542;
+      --text: #e9eefb;
+      --muted: #9aa8c7;
+      --accent: #5aa9ff;
+      --accent2: #7d6bff;
+      --green: #3ecf8e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 600px at 70% -10%, #22346b 0%, transparent 60%), var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 22px 0; border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    .logo { display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 22px; letter-spacing: .3px; }
+    .logo-mark {
+      width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+      background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; font-weight: 900;
+      box-shadow: 0 8px 24px rgba(90,169,255,.25);
+    }
+    .badge {
+      font-size: 13px; color: var(--muted); border: 1px solid rgba(255,255,255,.12);
+      padding: 6px 12px; border-radius: 999px;
+    }
+    .hero { padding: 74px 0 48px; }
+    .hero h1 {
+      font-size: clamp(38px, 6vw, 68px); line-height: 1.05; margin: 0 0 20px;
+      letter-spacing: -2px;
+    }
+    .hero h1 span { background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; color: transparent; }
+    .hero p { max-width: 700px; font-size: 19px; color: var(--muted); margin: 0 0 34px; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 14px; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+      padding: 14px 22px; border-radius: 14px; font-weight: 700; font-size: 16px;
+      border: 1px solid transparent; transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .btn:hover { transform: translateY(-2px); text-decoration: none; }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; box-shadow: 0 12px 32px rgba(90,169,255,.22); }
+    .btn-secondary { background: var(--panel2); color: var(--text); border-color: rgba(255,255,255,.1); }
+    .meta { margin-top: 18px; font-size: 13px; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px; margin: 34px 0 72px; }
+    .card {
+      background: linear-gradient(180deg, var(--panel), rgba(20,27,49,.7));
+      border: 1px solid rgba(255,255,255,.07); border-radius: 18px; padding: 24px;
+    }
+    .card h3 { margin: 0 0 10px; font-size: 19px; }
+    .card p { margin: 0; color: var(--muted); font-size: 15px; }
+    .icon { font-size: 26px; margin-bottom: 10px; }
+    section { margin-bottom: 68px; }
+    h2 { font-size: 32px; letter-spacing: -.6px; margin: 0 0 22px; }
+    .steps { counter-reset: step; display: grid; gap: 16px; }
+    .step {
+      counter-increment: step; position: relative; padding: 20px 22px 20px 68px;
+      background: var(--panel); border: 1px solid rgba(255,255,255,.07); border-radius: 16px;
+    }
+    .step::before {
+      content: counter(step); position: absolute; left: 20px; top: 20px;
+      width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+      background: rgba(90,169,255,.15); color: var(--accent); font-weight: 800;
+    }
+    .step b { display: block; margin-bottom: 4px; }
+    .step span { color: var(--muted); font-size: 15px; }
+    details {
+      background: var(--panel); border: 1px solid rgba(255,255,255,.07);
+      border-radius: 14px; padding: 16px 20px; margin-bottom: 12px;
+    }
+    summary { cursor: pointer; font-weight: 700; }
+    details p { color: var(--muted); margin: 12px 0 0; }
+    code {
+      background: rgba(255,255,255,.07); padding: 2px 6px; border-radius: 6px;
+      font-family: Consolas, monospace; font-size: 14px;
+    }
+    footer {
+      border-top: 1px solid rgba(255,255,255,.07); padding: 28px 0 40px;
+      color: var(--muted); font-size: 14px;
+    }
+    @media (max-width: 640px) {
+      .hero { padding-top: 48px; }
+      .badge { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo"><div class="logo-mark">W</div> Well AI</div>
+      <div class="badge">v1.0.0 · Windows 10/11</div>
+    </header>
+
+    <div class="hero">
+      <h1>Твой локальный<br><span>Well AI</span></h1>
+      <p>Чатбот, который умеет писать код, объяснять решения и генерировать картинки. Ставится на Windows одним кликом, работает через твой API-ключ и хранит историю только у тебя.</p>
+      <div class="buttons">
+        <a class="btn btn-primary" href="https://github.com/abibaokak/well-ai/releases/download/v1.0.0/WellAI-Setup.exe">⬇ Скачать установщик .exe</a>
+        <a class="btn btn-secondary" href="https://github.com/abibaokak/well-ai/releases/download/v1.0.0/WellAI-portable.zip">📦 Портативная версия .zip</a>
+        <a class="btn btn-secondary" href="https://github.com/abibaokak/well-ai">Исходный код на GitHub</a>
+      </div>
+      <div class="meta">SHA-256 установщика: <code>E16B5359973E580843D1525929562C8064B7DDEE160B0697F82F6BD3D5E0043E</code></div>
+    </div>
+
+    <div class="grid">
+      <div class="card"><div class="icon">💻</div><h3>Пишет код</h3><p>Проси скрипт, функцию, плагин или правку — получишь готовый пример с пояснением, как запустить.</p></div>
+      <div class="card"><div class="icon">🎨</div><h3>Генерирует картинки</h3><p>Опиши изображение текстом и нажми «Картинка». Файл сохранится в <code>Pictures\Well AI</code>.</p></div>
+      <div class="card"><div class="icon">🔒</div><h3>Локально и приватно</h3><p>Ключ и история лежат в <code>%APPDATA%\Well AI</code>. Никаких облачных аккаунтов Well AI.</p></div>
+      <div class="card"><div class="icon">⚡</div><h3>Без Python и Node</h3><p>Используется встроенный Windows PowerShell 5.1. Ничего дополнительно ставить не нужно.</p></div>
+    </div>
+
+    <section>
+      <h2>Как начать</h2>
+      <div class="steps">
+        <div class="step"><b>Скачай и запусти установщик</b><span>Программа появится в меню «Пуск» и на рабочем столе.</span></div>
+        <div class="step"><b>Открой «Настройки»</b><span>Вставь API-ключ OpenAI или другого OpenAI-совместимого провайдера.</span></div>
+        <div class="step"><b>Общайся</b><span>Enter — отправить, Shift+Enter — новая строка, кнопка «Картинка» — генерация изображения.</span></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Вопросы</h2>
+      <details><summary>Какой API нужен?</summary><p>По умолчанию используется <code>https://api.openai.com/v1</code> с моделями <code>gpt-4o-mini</code> и <code>gpt-image-1</code>. В настройках можно указать другой base URL и другие модели, если провайдер совместим с OpenAI API.</p></details>
+      <details><summary>Где хранится ключ?</summary><p>В файле <code>%APPDATA%\Well AI\config.json</code>. Не публикуй этот файл. Удаление настроек предлагается при uninstall.</p></details>
+      <details><summary>Почему картинка не генерируется?</summary><p>Проверь, что у ключа есть доступ к выбранной модели картинок. Для OpenAI попробуй <code>gpt-image-1</code> или <code>dall-e-3</code> и разрешённый размер.</p></details>
+      <details><summary>Как обновить?</summary><p>Скачай новый установщик и запусти его — он перезапишет файлы программы, сохранив настройки и историю.</p></details>
+    </section>
+
+    <footer>
+      Well AI · локальный ассистент · <a href="https://github.com/abibaokak/well-ai">GitHub</a> · <a href="https://abibaokak.github.io/well-ai/">эта страница</a>
+    </footer>
+  </div>
+</body>
+</html>
