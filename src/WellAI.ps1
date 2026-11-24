@@ -9,8 +9,30 @@
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
+
+[ComVisible(true)]
+public class WellAiJsBridge
+{
+    public static Action<string> PromptHandler;
+
+    public void UsePrompt(string text)
+    {
+        if (PromptHandler != null) { PromptHandler(text); }
+    }
+
+    public void CopyText(string text)
+    {
+        if (!String.IsNullOrEmpty(text)) { Clipboard.SetText(text); }
+    }
+}
+"@ -ReferencedAssemblies 'System.Windows.Forms'
+
 $script:AppName    = 'Well AI'
-$script:AppVersion = '1.1.0'
+$script:AppVersion = '1.2.0'
 $script:ConfigDir  = Join-Path $env:APPDATA 'Well AI'
 $script:ConfigPath = Join-Path $script:ConfigDir 'config.json'
 $script:ChatsDir   = Join-Path $script:ConfigDir 'chats'
@@ -177,6 +199,8 @@ function Refresh-ChatButtons {
         $btn.Height = 46
         $btn.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
         $btn.FlatAppearance.BorderSize = 0
+        $btn.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(36, 48, 76)
+        $btn.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(45, 90, 165)
         $btn.BackColor = if ([string]$data.id -eq [string]$script:CurrentChatId) { $script:PanelBg } else { $script:SidebarBg }
         $btn.ForeColor = $script:TextColor
         $btn.Font = New-Object System.Drawing.Font('Segoe UI', 9)
@@ -212,7 +236,9 @@ function ConvertTo-ChatHtml {
         if ($m.Index -gt $index) {
             [void]$sb.Append((Convert-PlainHtml -Text $Text.Substring($index, $m.Index - $index)))
         }
-        [void]$sb.Append('<pre><code>')
+        $lang = [System.Net.WebUtility]::HtmlEncode($m.Groups[1].Value)
+        if (-not $lang) { $lang = 'код' }
+        [void]$sb.Append('<pre data-lang="').Append($lang).Append('"><code>')
         [void]$sb.Append([System.Net.WebUtility]::HtmlEncode($m.Groups[2].Value))
         [void]$sb.Append('</code></pre>')
         $index = $m.Index + $m.Length
@@ -240,6 +266,16 @@ function Clear-Browser {
     try { $script:Browser.Document.InvokeScript('clearChat') } catch {}
 }
 
+function Show-Typing {
+    if (-not $script:Browser -or -not $script:Browser.Document) { return }
+    try { $script:Browser.Document.InvokeScript('showTyping') } catch {}
+}
+
+function Hide-Typing {
+    if (-not $script:Browser -or -not $script:Browser.Document) { return }
+    try { $script:Browser.Document.InvokeScript('hideTyping') } catch {}
+}
+
 function Add-BrowserMessage {
     param([string]$Role, [string]$Html, [string]$Meta = '')
     if (-not $script:Browser -or -not $script:Browser.Document) { return }
@@ -251,29 +287,98 @@ function Add-BrowserMessage {
 function Get-ChatTemplate {
     return @'
 <html><head><meta charset="utf-8"><style>
-html,body{margin:0;padding:0;height:100%;background:#0d111c;color:#e8edf8;font-family:'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.55}
-#chat{padding:26px 34px 34px 34px}
-.msg{margin:0 0 18px;display:flex;justify-content:flex-start}
-.msg.user{justify-content:flex-end}
-.bubble{max-width:78%;padding:12px 16px;border-radius:14px;background:#182033;border:1px solid #26314d;box-shadow:0 6px 18px rgba(0,0,0,.18);word-wrap:break-word;overflow-wrap:break-word}
-.msg.user .bubble{background:#2b6cf5;border-color:#2b6cf5;color:#fff;border-bottom-right-radius:4px}
-.msg.assistant .bubble{border-bottom-left-radius:4px}
-pre{margin:8px 0 4px 0;background:#0a0e18;border:1px solid #26314d;border-radius:9px;padding:11px 13px;overflow:auto;white-space:pre-wrap;word-wrap:break-word;font-family:Consolas,'Courier New',monospace;font-size:13px;color:#d8e4ff}
+html,body{margin:0;padding:0;height:100%;color:#e9eefb;font-family:'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.58;background:#0d111c}
+body{background:linear-gradient(155deg,#121c34 0%,#0d111c 42%,#111428 100%)}
+#chat{max-width:900px;margin:0 auto;padding:30px 34px 40px 34px}
+.empty{text-align:center;padding:80px 20px 40px 20px}
+.logo{width:74px;height:74px;line-height:74px;margin:0 auto 20px auto;border-radius:22px;font-size:34px;font-weight:800;color:#fff;background:linear-gradient(135deg,#4182ff,#7d69ff);box-shadow:0 18px 45px rgba(65,130,255,.32)}
+.empty h1{margin:0 0 8px 0;font-size:30px;font-weight:700;letter-spacing:-.5px}
+.empty .sub{color:#94a3c4;font-size:15px;margin-bottom:30px}
+.chips{width:100%;max-width:660px;margin:0 auto}
+.chip{display:inline-block;margin:5px;padding:11px 16px;border-radius:12px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);color:#cdd8f2;cursor:pointer;font-size:13px}
+.chip:hover{background:rgba(65,130,255,.16);border-color:rgba(65,130,255,.5);color:#fff}
+.row{display:table;width:100%;margin:0 0 20px 0}
+.ava-cell{display:table-cell;width:46px;vertical-align:top;padding-top:2px}
+.bub-cell{display:table-cell;vertical-align:top;width:100%}
+.msg.user .row{direction:rtl}
+.msg.user .ava-cell,.msg.user .bub-cell{direction:ltr}
+.avatar{width:32px;height:32px;line-height:32px;text-align:center;border-radius:50%;font-size:13px;font-weight:800;color:#fff;display:inline-block}
+.msg.assistant .avatar{background:linear-gradient(135deg,#4182ff,#7d69ff);box-shadow:0 6px 18px rgba(65,130,255,.28)}
+.msg.user .avatar{background:linear-gradient(135deg,#2f3c5c,#41527d);box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.bubble{display:inline-block;max-width:82%;padding:13px 17px;border-radius:16px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);box-shadow:0 10px 28px rgba(0,0,0,.22);word-wrap:break-word;overflow-wrap:break-word}
+.msg.user .bubble{background:linear-gradient(135deg,#3b7cff,#4168e8);border-color:rgba(255,255,255,.16);color:#fff;border-top-right-radius:5px}
+.msg.assistant .bubble{border-top-left-radius:5px}
+pre{margin:9px 0 5px 0;background:#080d18;border:1px solid #26314d;border-radius:0 0 10px 10px;padding:12px 14px;overflow:auto;white-space:pre-wrap;word-wrap:break-word;font-family:Consolas,'Courier New',monospace;font-size:13px;color:#d8e4ff}
 code{font-family:Consolas,'Courier New',monospace}
-img{max-width:100%;border-radius:10px;border:1px solid #26314d;display:block}
-.meta{font-size:11px;color:#8a97b5;margin-top:5px}
+.codewrap{margin:11px 0 6px 0;border:1px solid #26314d;border-radius:10px;overflow:hidden;background:#080d18}
+.codebar{height:31px;line-height:31px;padding:0 10px;background:#18223a;border-bottom:1px solid #26314d;font-size:11px;color:#8fa2c8;text-transform:uppercase;letter-spacing:.6px}
+.copy{float:right;margin-top:5px;padding:2px 9px;border-radius:6px;border:1px solid #344367;background:#222e4d;color:#c8d6f5;font-size:11px;cursor:pointer}
+.copy:hover{background:#2c3d68;color:#fff}
+img{max-width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.12);display:block;margin-top:6px}
+.meta{font-size:11px;color:#8797ba;margin-top:7px}
+.typing{display:inline-block;padding:14px 18px;border-radius:16px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09)}
+.dot{display:inline-block;width:7px;height:7px;margin:0 3px;border-radius:50%;background:#7d93c4;animation:pulse 1.1s infinite}
+.dot.d2{animation-delay:.18s}.dot.d3{animation-delay:.36s}
+@keyframes pulse{0%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}100%{opacity:.3;transform:translateY(0)}}
 </style></head><body>
 <div id="chat"></div>
 <script>
-function addMessage(role, html, meta){
-  var wrap=document.createElement('div'); wrap.className='msg '+role;
-  var bub=document.createElement('div'); bub.className='bubble'; bub.innerHTML=html;
-  wrap.appendChild(bub);
-  if(meta){ var m=document.createElement('div'); m.className='meta'; m.innerHTML=meta; bub.appendChild(m); }
-  document.getElementById('chat').appendChild(wrap);
-  window.scrollTo(0, document.body.scrollHeight);
+function scrollBottom(){window.scrollTo(0,document.body.scrollHeight)}
+function renderEmpty(){
+ var c=document.getElementById('chat');
+ c.innerHTML='<div class="empty" id="empty"><div class="logo">W</div><h1>Well AI</h1>'+
+ '<div class="sub">Локальная модель, код и картинки. С чего начнём?</div><div class="chips">'+
+ '<div class="chip" onclick="window.external.UsePrompt(\'Напиши PowerShell-скрипт, который выводит Hello World\')">Напиши скрипт</div>'+
+ '<div class="chip" onclick="window.external.UsePrompt(\'Объясни этот код простыми словами\')">Объясни код</div>'+
+ '<div class="chip" onclick="window.external.UsePrompt(\'Придумай идею для Minecraft-плагина\')">Идея для плагина</div>'+
+ '</div></div>';
 }
-function clearChat(){ document.getElementById('chat').innerHTML=''; }
+function removeEmpty(){var e=document.getElementById('empty');if(e){e.parentNode.removeChild(e)}}
+function decorateCode(bub){
+ var pres=bub.getElementsByTagName('pre');
+ for(var i=0;i<pres.length;i++){
+  var pre=pres[i]; var lang=pre.getAttribute('data-lang')||'код';
+  var wrap=document.createElement('div'); wrap.className='codewrap';
+  var bar=document.createElement('div'); bar.className='codebar';
+  var lab=document.createElement('span'); lab.innerHTML=lang; bar.appendChild(lab);
+  var btn=document.createElement('button'); btn.className='copy'; btn.innerHTML='Копировать';
+  btn.onclick=function(){
+   var code=this.parentNode.parentNode.getElementsByTagName('code')[0].innerText;
+   try{window.external.CopyText(code);this.innerHTML='Скопировано';}catch(e){this.innerHTML='Ошибка';}
+  };
+  bar.appendChild(btn); wrap.appendChild(bar);
+  pre.parentNode.insertBefore(wrap,pre); wrap.appendChild(pre);
+ }
+}
+function addMessage(role,html,meta){
+ removeEmpty(); hideTyping();
+ var wrap=document.createElement('div'); wrap.className='msg '+role;
+ var row=document.createElement('div'); row.className='row';
+ var ac=document.createElement('div'); ac.className='ava-cell';
+ var av=document.createElement('div'); av.className='avatar'; av.innerHTML=(role==='user')?'В':'W'; ac.appendChild(av);
+ var bc=document.createElement('div'); bc.className='bub-cell';
+ var bub=document.createElement('div'); bub.className='bubble'; bub.innerHTML=html;
+ decorateCode(bub);
+ if(meta){var m=document.createElement('div');m.className='meta';m.innerHTML=meta;bub.appendChild(m)}
+ bc.appendChild(bub); row.appendChild(ac); row.appendChild(bc); wrap.appendChild(row);
+ document.getElementById('chat').appendChild(wrap); scrollBottom();
+}
+function clearChat(){document.getElementById('chat').innerHTML='';renderEmpty()}
+function showTyping(){
+ removeEmpty();
+ if(document.getElementById('typing'))return;
+ var wrap=document.createElement('div');wrap.className='msg assistant';wrap.id='typing';
+ var row=document.createElement('div');row.className='row';
+ var ac=document.createElement('div');ac.className='ava-cell';
+ var av=document.createElement('div');av.className='avatar';av.innerHTML='W';ac.appendChild(av);
+ var bc=document.createElement('div');bc.className='bub-cell';
+ var t=document.createElement('div');t.className='typing';
+ t.innerHTML='<span class="dot"></span><span class="dot d2"></span><span class="dot d3"></span>';
+ bc.appendChild(t);row.appendChild(ac);row.appendChild(bc);wrap.appendChild(row);
+ document.getElementById('chat').appendChild(wrap);scrollBottom();
+}
+function hideTyping(){var t=document.getElementById('typing');if(t){t.parentNode.removeChild(t)}}
+renderEmpty();
 </script>
 </body></html>
 '@
@@ -349,6 +454,8 @@ function New-Button {
     $b.FlatAppearance.BorderSize = 0
     $b.BackColor = if ($Primary) { $script:Accent } else { $script:PanelBg }
     $b.ForeColor = if ($Primary) { [System.Drawing.Color]::White } else { $script:TextColor }
+    $b.FlatAppearance.MouseOverBackColor = if ($Primary) { [System.Drawing.Color]::FromArgb(86, 150, 255) } else { [System.Drawing.Color]::FromArgb(36, 48, 76) }
+    $b.FlatAppearance.MouseDownBackColor = if ($Primary) { [System.Drawing.Color]::FromArgb(48, 106, 220) } else { [System.Drawing.Color]::FromArgb(30, 40, 64) }
     $b.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $b.Cursor = [System.Windows.Forms.Cursors]::Hand
     return $b
@@ -368,6 +475,7 @@ function Start-ChatRequest {
     Save-Chat
     Refresh-ChatButtons
     Add-BrowserMessage -Role 'user' -Html (ConvertTo-ChatHtml -Text $UserText)
+    Show-Typing
     $script:InputBox.Clear()
 
     $messages = @()
@@ -450,6 +558,7 @@ function Start-ImageRequest {
     $script:Messages += @{ role = 'user'; content = ('Картинка: ' + $Prompt); type = 'text' }
     Save-Chat
     Add-BrowserMessage -Role 'user' -Html (ConvertTo-ChatHtml -Text ('Картинка: ' + $Prompt))
+    Show-Typing
     $script:InputBox.Clear()
 
     New-Item -ItemType Directory -Force -Path $script:ImagesDir | Out-Null
@@ -509,6 +618,7 @@ function Start-ImageRequest {
 }
 
 function On-JobTimerTick {
+    Hide-Typing
     $job = $script:ActiveJob
     if (-not $job) { return }
     $state = [string]$job.JobStateInfo.State
@@ -736,6 +846,12 @@ $header.Height = 58
 $header.BackColor = $script:SidebarBg
 $main.Controls.Add($header)
 
+$accentStrip = New-Object System.Windows.Forms.Panel
+$accentStrip.Dock = [System.Windows.Forms.DockStyle]::Top
+$accentStrip.Height = 3
+$accentStrip.BackColor = $script:Accent
+$header.Controls.Add($accentStrip)
+
 $script:TitleLabel = New-Object System.Windows.Forms.Label
 $script:TitleLabel.Text = 'Новый чат'
 $script:TitleLabel.ForeColor = [System.Drawing.Color]::White
@@ -752,6 +868,7 @@ $script:Browser.Dock = [System.Windows.Forms.DockStyle]::Fill
 $script:Browser.ScriptErrorsSuppressed = $true
 $script:Browser.IsWebBrowserContextMenuEnabled = $false
 $script:Browser.WebBrowserShortcutsEnabled = $false
+$script:Browser.ObjectForScripting = (New-Object WellAiJsBridge)
 $main.Controls.Add($script:Browser)
 
 $script:Browser.Navigate('about:blank')
@@ -792,6 +909,12 @@ $script:InputBox.ForeColor = $script:TextColor
 $script:InputBox.Font = New-Object System.Drawing.Font('Segoe UI', 10)
 $script:InputBox.BorderStyle = [System.Windows.Forms.BorderStyle]::FixedSingle
 $inputPanel.Controls.Add($script:InputBox)
+
+[WellAiJsBridge]::PromptHandler = {
+    param([string]$Text)
+    $script:InputBox.Text = $Text
+    $script:InputBox.Focus()
+}
 
 $script:SendButton = New-Button 'Отправить' 912 56 168 54 $true
 $inputPanel.Controls.Add($script:SendButton)
