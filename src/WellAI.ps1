@@ -8,7 +8,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $script:AppName    = 'Well AI'
-$script:AppVersion = '1.0.1'
+$script:AppVersion = '1.0.2'
 $script:ConfigDir  = Join-Path $env:APPDATA 'Well AI'
 $script:ConfigPath = Join-Path $script:ConfigDir 'config.json'
 $script:HistoryPath= Join-Path $script:ConfigDir 'history.json'
@@ -16,15 +16,10 @@ $script:ImagesDir  = Join-Path ([Environment]::GetFolderPath('MyPictures')) 'Wel
 $script:InstallDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $script:DefaultSystemPrompt = @'
-Ты Well AI — полезный локальный ассистент, который особенно хорошо пишет код.
-Отвечай на языке пользователя (если пишут по-русски — отвечай по-русски).
-Когда просят код:
-1. Давай готовый рабочий пример, а не только идею.
-2. Указывай язык блока кода и, если важно, версию/окружение (Windows, PowerShell 5.1, Python 3, Minecraft Paper 1.21 и т.д.).
-3. Кратко объясняй, как запустить и где взять секреты/ключи.
-4. Не выдумывай несуществующие библиотеки и API.
-5. Если нужно изменить чужой код — показывай конкретные правки.
-Будь дружелюбным, но не слишком многословным.
+Ты Well AI — локальный ассистент, который особенно хорошо пишет код.
+ПРАВИЛО ЯЗЫКА: если пользователь пишет по-русски, ВЕСЬ ответ без исключений должен быть на русском языке. Никогда не отвечай на английском, если вопрос задан по-русски.
+ПРАВИЛО КОДА: когда просят код, сначала дай готовый рабочий код в блоке с указанием языка, затем коротко объясни по-русски, как его запустить.
+Не выдумывай несуществующие библиотеки и API. Отвечай кратко и по делу.
 '@
 
 $script:DefaultConfig = @{
@@ -58,6 +53,10 @@ function Get-WellConfig {
                 $value = $loaded.$key
             }
             $result[$key] = $value
+        }
+        # Миграция старого промпта: раньше локальная модель иногда отвечала по-английски.
+        if ([string]$result.systemPrompt -match 'полезный локальный ассистент') {
+            $result.systemPrompt = $script:DefaultSystemPrompt
         }
         return $result
     } catch {
@@ -153,8 +152,14 @@ function Start-ChatRequest {
     $script:InputBox.Clear()
 
     $messages = @()
+    $systemPrompt = [string]$script:Config.systemPrompt
+    if (-not [string]::IsNullOrWhiteSpace($systemPrompt)) {
+        $messages += @{ role = 'system'; content = $systemPrompt }
+    }
     foreach ($m in $script:History) {
-        $messages += @{ role = [string]$m.role; content = [string]$m.content }
+        $role = [string]$m.role
+        if ($role -eq 'system') { continue }
+        $messages += @{ role = $role; content = [string]$m.content }
     }
     $messages += @{ role = 'user'; content = $UserText }
 
@@ -181,7 +186,11 @@ function Start-ChatRequest {
             'Content-Type' = 'application/json'
         }
         try {
-            $resp = Invoke-RestMethod -Method Post -Uri ([string]$data.config.apiBase + '/chat/completions') -Headers $headers -Body $body -ContentType 'application/json' -TimeoutSec 180
+            # PowerShell 5.1 декодирует JSON без charset как ANSI — читаем байты как UTF-8 сами.
+            $rawPath = [IO.Path]::Combine([IO.Path]::GetTempPath(), 'wellai-chat-' + [Guid]::NewGuid().ToString('N') + '.json')
+            Invoke-WebRequest -Method Post -Uri ([string]$data.config.apiBase + '/chat/completions') -Headers $headers -Body $body -ContentType 'application/json' -OutFile $rawPath -UseBasicParsing -TimeoutSec 180
+            $resp = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($rawPath)) | ConvertFrom-Json
+            Remove-Item -LiteralPath $rawPath -Force -ErrorAction SilentlyContinue
             $text = ''
             if ($resp.choices -and $resp.choices.Count -gt 0) {
                 $text = [string]$resp.choices[0].message.content
@@ -242,7 +251,10 @@ function Start-ImageRequest {
             'Content-Type' = 'application/json'
         }
         try {
-            $resp = Invoke-RestMethod -Method Post -Uri ([string]$data.config.imageApiBase + '/images/generations') -Headers $headers -Body $body -ContentType 'application/json' -TimeoutSec 240
+            $rawPath = [IO.Path]::Combine([IO.Path]::GetTempPath(), 'wellai-image-' + [Guid]::NewGuid().ToString('N') + '.json')
+            Invoke-WebRequest -Method Post -Uri ([string]$data.config.imageApiBase + '/images/generations') -Headers $headers -Body $body -ContentType 'application/json' -OutFile $rawPath -UseBasicParsing -TimeoutSec 240
+            $resp = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($rawPath)) | ConvertFrom-Json
+            Remove-Item -LiteralPath $rawPath -Force -ErrorAction SilentlyContinue
             $item = $resp.data[0]
             if ($item.b64_json) {
                 $bytes = [Convert]::FromBase64String([string]$item.b64_json)
