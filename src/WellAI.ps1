@@ -32,7 +32,7 @@ public class WellAiJsBridge
 "@ -ReferencedAssemblies 'System.Windows.Forms'
 
 $script:AppName    = 'Well AI'
-$script:AppVersion = '1.2.0'
+$script:AppVersion = '1.3.0'
 $script:ConfigDir  = Join-Path $env:APPDATA 'Well AI'
 $script:ConfigPath = Join-Path $script:ConfigDir 'config.json'
 $script:ChatsDir   = Join-Path $script:ConfigDir 'chats'
@@ -51,21 +51,28 @@ $script:Green     = [System.Drawing.Color]::FromArgb(62, 207, 142)
 $script:Red       = [System.Drawing.Color]::FromArgb(240, 90, 90)
 
 $script:DefaultSystemPrompt = @'
-Ты Well AI — локальный ассистент, который особенно хорошо пишет код.
-ПРАВИЛО ЯЗЫКА: если пользователь пишет по-русски, ВЕСЬ ответ без исключений должен быть на русском языке. Никогда не отвечай на английском, если вопрос задан по-русски.
-ПРАВИЛО КОДА: когда просят код, сначала дай готовый рабочий код в блоке с указанием языка, затем коротко объясни по-русски, как его запустить.
-Не выдумывай несуществующие библиотеки и API. Отвечай кратко и по делу.
+Ты Well AI — дружелюбный, грамотный чат-ассистент, который работает локально на компьютере пользователя.
+
+ЯЗЫК: отвечай на языке последнего сообщения пользователя. Если вопрос по-русски — весь ответ по-русски, без английских вступлений.
+
+СТИЛЬ:
+- Отвечай как хороший современный ассистент: сначала суть, потом детали. Кратко и по делу, без лишних «Конечно!», «Чем могу помочь» и повторов вопроса.
+- Используй короткие абзацы и простые списки. Не пиши длинные однообразные инструкции, если спросили простое.
+- Не называй себя языковой моделью, не упоминай Ollama и технику, если пользователь сам не спросил.
+- Если не уверен — честно скажи и предложи, что уточнить. Не выдумывай факты, библиотеки и API.
+
+КОД: код или команды давай только когда их просят или когда они реально нужны, в блоке с указанием языка, затем одно короткое пояснение по-русски.
 '@
 
 $script:DefaultConfig = @{
     apiBase      = 'http://127.0.0.1:11434/v1'
     imageApiBase = 'https://api.openai.com/v1'
     apiKey       = ''
-    chatModel    = 'qwen2.5-coder:3b'
+    chatModel    = 'qwen2.5:3b'
     imageModel   = 'gpt-image-1'
     imageSize    = '1024x1024'
-    temperature  = 0.3
-    maxTokens    = 2000
+    temperature  = 0.6
+    maxTokens    = 900
     saveHistory  = $true
     systemPrompt = $script:DefaultSystemPrompt
 }
@@ -89,9 +96,12 @@ function Get-WellConfig {
             }
             $result[$key] = $value
         }
-        if ([string]$result.systemPrompt -match 'полезный локальный ассистент') {
+        if ([string]$result.systemPrompt -match 'полезный локальный ассистент' -or [string]$result.systemPrompt -match 'особенно хорошо пишет код') {
             $result.systemPrompt = $script:DefaultSystemPrompt
         }
+        if ([string]$result.chatModel -in @('qwen2.5-coder:3b', 'qwen3:4b')) { $result.chatModel = 'qwen2.5:3b' }
+        if ([double]$result.temperature -eq 0.3) { $result.temperature = 0.6 }
+        if ([int]$result.maxTokens -gt 1200) { $result.maxTokens = 900 }
         return $result
     } catch {
         return ($script:DefaultConfig.Clone())
@@ -276,6 +286,23 @@ function Hide-Typing {
     try { $script:Browser.Document.InvokeScript('hideTyping') } catch {}
 }
 
+function Begin-BrowserStream {
+    if (-not $script:Browser -or -not $script:Browser.Document) { return }
+    try { [void]$script:Browser.Document.InvokeScript('beginStream') } catch {}
+}
+
+function Update-BrowserStream {
+    param([string]$Html)
+    if (-not $script:Browser -or -not $script:Browser.Document) { return }
+    try { [void]$script:Browser.Document.InvokeScript('updateStream', @($Html)) } catch {}
+}
+
+function Finish-BrowserStream {
+    param([string]$Html, [string]$Meta = '')
+    if (-not $script:Browser -or -not $script:Browser.Document) { return }
+    try { [void]$script:Browser.Document.InvokeScript('finishStream', @($Html, $Meta)) } catch {}
+}
+
 function Add-BrowserMessage {
     param([string]$Role, [string]$Html, [string]$Meta = '')
     if (-not $script:Browser -or -not $script:Browser.Document) { return }
@@ -320,6 +347,8 @@ img{max-width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.12);dis
 .dot{display:inline-block;width:7px;height:7px;margin:0 3px;border-radius:50%;background:#7d93c4;animation:pulse 1.1s infinite}
 .dot.d2{animation-delay:.18s}.dot.d3{animation-delay:.36s}
 @keyframes pulse{0%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}100%{opacity:.3;transform:translateY(0)}}
+.cursor{display:inline-block;width:7px;height:15px;margin-left:2px;vertical-align:-2px;background:#7d9dff;border-radius:2px;animation:blink .8s steps(2) infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
 </style></head><body>
 <div id="chat"></div>
 <script>
@@ -378,6 +407,31 @@ function showTyping(){
  document.getElementById('chat').appendChild(wrap);scrollBottom();
 }
 function hideTyping(){var t=document.getElementById('typing');if(t){t.parentNode.removeChild(t)}}
+function beginStream(){
+ removeEmpty(); hideTyping();
+ if(document.getElementById('streammsg'))return;
+ var wrap=document.createElement('div');wrap.className='msg assistant';wrap.id='streammsg';
+ var row=document.createElement('div');row.className='row';
+ var ac=document.createElement('div');ac.className='ava-cell';
+ var av=document.createElement('div');av.className='avatar';av.innerHTML='W';ac.appendChild(av);
+ var bc=document.createElement('div');bc.className='bub-cell';
+ var bub=document.createElement('div');bub.className='bubble';bub.id='streambubble';
+ bub.innerHTML='<span class="cursor"></span>';
+ bc.appendChild(bub);row.appendChild(ac);row.appendChild(bc);wrap.appendChild(row);
+ document.getElementById('chat').appendChild(wrap);scrollBottom();
+}
+function updateStream(html){
+ var b=document.getElementById('streambubble');if(!b)return;
+ b.innerHTML=html+'<span class="cursor"></span>';scrollBottom();
+}
+function finishStream(html,meta){
+ var b=document.getElementById('streambubble');if(!b){addMessage('assistant',html,meta);return;}
+ b.innerHTML=html;decorateCode(b);
+ if(meta){var m=document.createElement('div');m.className='meta';m.innerHTML=meta;b.appendChild(m)}
+ b.removeAttribute('id');
+ var w=document.getElementById('streammsg');if(w){w.removeAttribute('id')}
+ scrollBottom();
+}
 renderEmpty();
 </script>
 </body></html>
@@ -405,6 +459,38 @@ function Set-Busy {
     $script:InputBox.Enabled = -not $Busy
     if ($Busy) { $script:MainForm.Cursor = [System.Windows.Forms.Cursors]::WaitCursor }
     else { $script:MainForm.Cursor = [System.Windows.Forms.Cursors]::Default }
+}
+
+function Get-LocalModels {
+    $result = @()
+    $base = ([string]$script:Config.apiBase).TrimEnd('/')
+    if ($base -notmatch '127\.0\.0\.1|localhost') { return $result }
+    try {
+        $r = Invoke-RestMethod -Uri (($base -replace '/v1$', '') + '/api/tags') -TimeoutSec 3
+        foreach ($m in @($r.models)) { $result += [string]$m.name }
+    } catch {}
+    return $result
+}
+
+function Ensure-Ollama {
+    $base = ([string]$script:Config.apiBase).TrimEnd('/')
+    if ($base -notmatch '127\.0\.0\.1|localhost') { return }
+    try {
+        $null = Invoke-RestMethod -Uri (($base -replace '/v1$', '') + '/api/tags') -TimeoutSec 2
+        return
+    } catch {}
+    $exe = Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
+    if (Test-Path -LiteralPath $exe) {
+        Start-Process -FilePath $exe -ArgumentList 'serve' -WindowStyle Hidden -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 4
+    }
+    # Если модели ещё нет на новом ПК — скачиваем её автоматически.
+    try {
+        $need = [string]$script:Config.chatModel
+        if ($need -and @(Get-LocalModels) -notcontains $need -and (Test-Path -LiteralPath $exe)) {
+            Start-Process -FilePath $exe -ArgumentList @('pull', $need) -WindowStyle Hidden -ErrorAction SilentlyContinue
+        }
+    } catch {}
 }
 
 function Test-ApiKey {
@@ -475,7 +561,7 @@ function Start-ChatRequest {
     Save-Chat
     Refresh-ChatButtons
     Add-BrowserMessage -Role 'user' -Html (ConvertTo-ChatHtml -Text $UserText)
-    Show-Typing
+    Begin-BrowserStream
     $script:InputBox.Clear()
 
     $messages = @()
@@ -488,58 +574,140 @@ function Start-ChatRequest {
         $messages += @{ role = [string]$m.role; content = [string]$m.content }
     }
 
-    # Дополнительно страхуем язык прямо в последнем сообщении: локальные
-    # код-модели иногда игнорируют system-промпт.
+    # Страховка языка только для русскоязычного вопроса.
     $payloadMessages = @()
     for ($i = 0; $i -lt $messages.Count; $i++) {
         $m = $messages[$i]
         $content = [string]$m.content
-        if ([string]$m.role -eq 'user' -and $i -eq ($messages.Count - 1)) {
-            $content = $content + [Environment]::NewLine + 'Отвечай строго по-русски, коротко. Если нужен код — дай его в блоке с указанием языка.'
+        if ([string]$m.role -eq 'user' -and $i -eq ($messages.Count - 1) -and $content -match '[\u0400-\u04FF]') {
+            $content = $content + [Environment]::NewLine + 'Отвечай по-русски, кратко и по делу.'
         }
         $payloadMessages += @{ role = [string]$m.role; content = $content }
     }
 
+    $script:StreamingActive = $true
+    $script:StreamFile = [IO.Path]::Combine([IO.Path]::GetTempPath(), 'wellai-stream-' + [Guid]::NewGuid().ToString('N') + '.txt')
+    $script:LastStreamText = ''
+    [IO.File]::WriteAllText($script:StreamFile, '', (New-Object Text.UTF8Encoding($false)))
+
     $payload = @{
-        config   = $script:Config
-        messages = $payloadMessages
+        config     = $script:Config
+        messages   = $payloadMessages
+        streamFile = $script:StreamFile
     } | ConvertTo-Json -Depth 20 -Compress
 
     Set-Busy $true
-    Set-Status 'Well AI думает...' $script:Green
+    Set-Status ("Well AI думает · " + [string]$script:Config.chatModel) $script:Green
 
     $script:ActiveJob = Start-Job -ScriptBlock {
         param($json)
         $data = $json | ConvertFrom-Json
-        $bodyObj = @{
-            model       = [string]$data.config.chatModel
-            messages    = $data.messages
-            temperature = [double]$data.config.temperature
-            max_tokens  = [int]$data.config.maxTokens
+        $base = ([string]$data.config.apiBase).TrimEnd('/')
+        $model = [string]$data.config.chatModel
+        $isLocalOllama = ($base -match '127\.0\.0\.1|localhost')
+        if ($isLocalOllama) {
+            # Нативный API Ollama быстрее и не кладёт ответ в reasoning.
+            $bodyObj = @{
+                model    = $model
+                messages = $data.messages
+                stream   = $true
+                options  = @{
+                    temperature = [double]$data.config.temperature
+                    num_predict = [int]$data.config.maxTokens
+                }
+            }
+            if ($model -like 'qwen3*') { $bodyObj.think = $false }
+            $uri = ($base -replace '/v1$', '') + '/api/chat'
+        } else {
+            $bodyObj = @{
+                model       = $model
+                messages    = $data.messages
+                temperature = [double]$data.config.temperature
+                max_tokens  = [int]$data.config.maxTokens
+                stream      = $true
+            }
+            $uri = $base + '/chat/completions'
         }
         $body = $bodyObj | ConvertTo-Json -Depth 20 -Compress
-        $headers = @{
-            Authorization  = 'Bearer ' + [string]$data.config.apiKey
-            'Content-Type' = 'application/json'
-        }
-        try {
-            # PowerShell 5.1 декодирует JSON без charset как ANSI — читаем байты как UTF-8 сами.
-            $rawPath = [IO.Path]::Combine([IO.Path]::GetTempPath(), 'wellai-chat-' + [Guid]::NewGuid().ToString('N') + '.json')
-            $bodyBytes = [Text.Encoding]::UTF8.GetBytes($body)
-            Invoke-WebRequest -Method Post -Uri ([string]$data.config.apiBase + '/chat/completions') -Headers $headers -Body $bodyBytes -ContentType 'application/json; charset=utf-8' -OutFile $rawPath -UseBasicParsing -TimeoutSec 180
-            $resp = [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($rawPath)) | ConvertFrom-Json
-            Remove-Item -LiteralPath $rawPath -Force -ErrorAction SilentlyContinue
-            $text = ''
-            if ($resp.choices -and $resp.choices.Count -gt 0) {
-                $text = [string]$resp.choices[0].message.content
-                if ([string]::IsNullOrWhiteSpace($text)) { $text = [string]$resp.choices[0].text }
+        $streamFile = [string]$data.streamFile
+        $utf8 = New-Object Text.UTF8Encoding($false)
+        $text = New-Object Text.StringBuilder
+        $shownLength = 0
+        # qwen3 иногда всё равно рассуждает вслух, несмотря на think=false.
+        # Показываем пользователю только текст после </think>.
+        $stripThinking = ($model -like 'qwen3*')
+        $visibleText = {
+            param([string]$Raw)
+            if ($stripThinking) {
+                $i = $Raw.IndexOf('</think>')
+                if ($i -ge 0) { return $Raw.Substring($i + 8).TrimStart() }
+                return ''
             }
-            if ([string]::IsNullOrWhiteSpace($text)) { throw 'Пустой ответ от модели.' }
-            [pscustomobject]@{ ok = $true; text = $text }
+            return $Raw
+        }
+        # FileShare.ReadWrite нужен, чтобы таймер окна читал файл во время записи.
+        $fs = New-Object -TypeName IO.FileStream -ArgumentList @($streamFile, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+        $writer = New-Object -TypeName IO.StreamWriter -ArgumentList @($fs, $utf8)
+        $writer.AutoFlush = $true
+        try {
+            $req = [Net.HttpWebRequest]::Create($uri)
+            $req.Method = 'POST'
+            $req.ContentType = 'application/json; charset=utf-8'
+            $req.Headers.Add('Authorization', 'Bearer ' + [string]$data.config.apiKey)
+            $req.Timeout = 180000
+            $req.ReadWriteTimeout = 180000
+            $bodyBytes = [Text.Encoding]::UTF8.GetBytes($body)
+            $req.ContentLength = $bodyBytes.Length
+            $out = $req.GetRequestStream()
+            $out.Write($bodyBytes, 0, $bodyBytes.Length)
+            $out.Close()
+
+            $resp = $req.GetResponse()
+            $rs = $resp.GetResponseStream()
+            $reader = New-Object -TypeName IO.StreamReader -ArgumentList @($rs, [Text.Encoding]::UTF8)
+            while ($null -ne ($line = $reader.ReadLine())) {
+                $delta = $null
+                if ($isLocalOllama) {
+                    if (-not $line.StartsWith('{')) { continue }
+                    try { $chunk = $line | ConvertFrom-Json } catch { continue }
+                    $delta = $chunk.message.content
+                } else {
+                    if (-not $line.StartsWith('data:')) { continue }
+                    $chunkText = $line.Substring(5).Trim()
+                    if ($chunkText -eq '[DONE]') { break }
+                    if (-not $chunkText) { continue }
+                    try { $chunk = $chunkText | ConvertFrom-Json } catch { continue }
+                    if ($chunk.choices -and $chunk.choices.Count -gt 0) {
+                        $delta = $chunk.choices[0].delta.content
+                        if ($null -eq $delta) { $delta = $chunk.choices[0].text }
+                    }
+                }
+                if ($delta) {
+                    [void]$text.Append($delta)
+                    $visible = & $visibleText $text.ToString()
+                    if ($visible.Length -gt $shownLength) {
+                        $writer.Write($visible.Substring($shownLength))
+                        $writer.Flush()
+                        $shownLength = $visible.Length
+                    }
+                }
+            }
+            $reader.Close()
+            $resp.Close()
+            $finalText = & $visibleText $text.ToString()
+            if ([string]::IsNullOrWhiteSpace($finalText)) { $finalText = $text.ToString().Trim() }
+            if ($finalText.Length -eq 0) { throw 'Пустой ответ от модели.' }
+            if ($finalText.Length -gt $shownLength) { $writer.Write($finalText.Substring($shownLength)) }
+            [pscustomobject]@{ ok = $true; text = $finalText; partial = $finalText }
         } catch {
             $msg = $_.Exception.Message
             if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $msg = $_.ErrorDetails.Message }
-            [pscustomobject]@{ ok = $false; text = $msg }
+            $partial = & $visibleText $text.ToString()
+            if ([string]::IsNullOrWhiteSpace($partial)) { $partial = '' }
+            [pscustomobject]@{ ok = $false; text = $msg; partial = $partial }
+        } finally {
+            $writer.Close()
+            $fs.Close()
         }
     } -ArgumentList $payload
 
@@ -549,6 +717,8 @@ function Start-ChatRequest {
 function Start-ImageRequest {
     param([string]$Prompt)
 
+    $script:StreamingActive = $false
+    $script:StreamFile = $null
     if (-not (Test-ApiKey -ForImages $true)) { return }
     if ([string]::IsNullOrWhiteSpace($Prompt)) {
         Add-BrowserMessage -Role 'assistant' -Html (ConvertTo-ChatHtml -Text 'Напиши, какую картинку сгенерировать, например: «кошмарный бургер в стиле пиксель-арт».') -Meta 'картинка'
@@ -618,7 +788,15 @@ function Start-ImageRequest {
 }
 
 function On-JobTimerTick {
+    if ($script:StreamingActive -and $script:StreamFile -and (Test-Path -LiteralPath $script:StreamFile)) {
+        try { $partialNow = [IO.File]::ReadAllText($script:StreamFile, [Text.Encoding]::UTF8) } catch { $partialNow = '' }
+        if ($partialNow -ne $script:LastStreamText) {
+            $script:LastStreamText = $partialNow
+            Update-BrowserStream -Html (ConvertTo-ChatHtml -Text $partialNow)
+        }
+    }
     Hide-Typing
+
     $job = $script:ActiveJob
     if (-not $job) { return }
     $state = [string]$job.JobStateInfo.State
@@ -631,14 +809,17 @@ function On-JobTimerTick {
     Set-Busy $false
 
     $r = if ($result.Count -gt 0) { $result[0] } else { $null }
+    $streaming = [bool]$script:StreamingActive
+    $streamFile = $script:StreamFile
+    $script:StreamingActive = $false
+    $script:StreamFile = $null
+
     if (-not $r) {
-        Add-BrowserMessage -Role 'assistant' -Html (ConvertTo-ChatHtml -Text 'Не удалось получить ответ. Попробуй ещё раз.') -Meta 'ошибка'
+        $msg = 'Не удалось получить ответ. Попробуй ещё раз.'
+        if ($streaming) { Finish-BrowserStream -Html (ConvertTo-ChatHtml -Text $msg) -Meta 'ошибка' }
+        else { Add-BrowserMessage -Role 'assistant' -Html (ConvertTo-ChatHtml -Text $msg) -Meta 'ошибка' }
         Set-Status 'Ошибка запроса' $script:Red
-        return
-    }
-    if (-not $r.ok) {
-        Add-BrowserMessage -Role 'assistant' -Html (ConvertTo-ChatHtml -Text ([string]$r.text)) -Meta 'ошибка API'
-        Set-Status 'Ошибка API' $script:Red
+        if ($streamFile) { Remove-Item -LiteralPath $streamFile -Force -ErrorAction SilentlyContinue }
         return
     }
 
@@ -648,14 +829,32 @@ function On-JobTimerTick {
         Save-Chat
         Add-BrowserMessage -Role 'assistant' -Html (Get-ImageHtml -Path $path) -Meta ([IO.Path]::GetFileName($path))
         Set-Status 'Картинка готова' $script:Green
-    } else {
-        $answer = [string]$r.text
+        if ($streamFile) { Remove-Item -LiteralPath $streamFile -Force -ErrorAction SilentlyContinue }
+        return
+    }
+
+    $answer = [string]$r.text
+    $partial = ''
+    if ($r.PSObject.Properties.Name -contains 'partial') { $partial = [string]$r.partial }
+    if (-not $r.ok -and [string]::IsNullOrWhiteSpace($partial)) {
+        if ($streaming) { Finish-BrowserStream -Html (ConvertTo-ChatHtml -Text ([string]$r.text)) -Meta 'ошибка API' }
+        else { Add-BrowserMessage -Role 'assistant' -Html (ConvertTo-ChatHtml -Text ([string]$r.text)) -Meta 'ошибка API' }
+        Set-Status 'Ошибка API' $script:Red
+        if ($streamFile) { Remove-Item -LiteralPath $streamFile -Force -ErrorAction SilentlyContinue }
+        return
+    }
+    if ([string]::IsNullOrWhiteSpace($answer)) { $answer = $partial }
+    if ($streaming) {
+        $meta = if ($r.ok) { [string]$script:Config.chatModel } else { 'ответ прерван' }
         $script:Messages += @{ role = 'assistant'; content = $answer; type = 'text' }
         Save-Chat
         Refresh-ChatButtons
+        Finish-BrowserStream -Html (ConvertTo-ChatHtml -Text $answer) -Meta $meta
+    } else {
         Add-BrowserMessage -Role 'assistant' -Html (ConvertTo-ChatHtml -Text $answer)
-        Set-Status 'Готово' $script:Green
     }
+    Set-Status 'Готово' $script:Green
+    if ($streamFile) { Remove-Item -LiteralPath $streamFile -Force -ErrorAction SilentlyContinue }
 }
 
 function Attach-File {
@@ -714,7 +913,14 @@ function Show-SettingsDialog {
     $tbKey = New-TextBox ([string]$script:Config.apiKey) 20 171 660 26 $true
 
     $form.Controls.Add((New-Label 'Модель для чата' 20 212 200))
-    $tbChat = New-TextBox ([string]$script:Config.chatModel) 200 209 480
+    $cbChat = New-Object System.Windows.Forms.ComboBox
+    $cbChat.Location = New-Object System.Drawing.Point(200, 209)
+    $cbChat.Size = New-Object System.Drawing.Size(480, 26)
+    $cbChat.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDown
+    $cbChat.BackColor = $script:PanelBg
+    $cbChat.ForeColor = $script:TextColor
+    foreach ($m in @(Get-LocalModels)) { [void]$cbChat.Items.Add([string]$m) }
+    $cbChat.Text = [string]$script:Config.chatModel
 
     $form.Controls.Add((New-Label 'Модель для картинок' 20 246 200))
     $tbImage = New-TextBox ([string]$script:Config.imageModel) 200 243 480
@@ -753,7 +959,12 @@ function Show-SettingsDialog {
         $script:Config.apiBase      = $tbBase.Text.Trim()
         $script:Config.imageApiBase = $tbImageBase.Text.Trim()
         $script:Config.apiKey       = $tbKey.Text.Trim()
-        $script:Config.chatModel    = $tbChat.Text.Trim()
+        $script:Config.chatModel    = $cbChat.Text.Trim()
+        if (-not $script:ModelCombo.Items.Contains($script:Config.chatModel)) {
+            [void]$script:ModelCombo.Items.Add($script:Config.chatModel)
+        }
+        $script:ModelCombo.SelectedItem = $script:Config.chatModel
+        $script:VersionLabel.Text = 'v' + $script:AppVersion + '  ·  ' + $script:Config.chatModel
         $script:Config.imageModel   = $tbImage.Text.Trim()
         $script:Config.imageSize    = [string]$cbSize.SelectedItem
         $script:Config.systemPrompt = $tbPrompt.Text
@@ -771,11 +982,15 @@ function Show-SettingsDialog {
 # ---------------------------------------------------------------------------
 
 $script:Config = Get-WellConfig
+Ensure-Ollama
 Initialize-ChatStorage
 $script:Messages = @()
 $script:CurrentChatId = ''
 $script:ActiveJob = $null
 $script:ChatButtons = @()
+$script:StreamingActive = $false
+$script:StreamFile = $null
+$script:LastStreamText = ''
 
 $script:MainForm = New-Object System.Windows.Forms.Form
 $form = $script:MainForm
@@ -830,9 +1045,9 @@ $script:ChatListPanel.AutoScroll = $true
 $script:ChatListPanel.BackColor = $script:SidebarBg
 $sidebar.Controls.Add($script:ChatListPanel)
 
-$versionLabel = New-Label ("v" + $script:AppVersion + "  ·  " + $script:Config.chatModel) 18 706 240 $script:MutedColor
-$versionLabel.Font = New-Object System.Drawing.Font('Segoe UI', 8)
-$sidebar.Controls.Add($versionLabel)
+$script:VersionLabel = New-Label ("v" + $script:AppVersion + "  ·  " + $script:Config.chatModel) 18 706 240 $script:MutedColor
+$script:VersionLabel.Font = New-Object System.Drawing.Font('Segoe UI', 8)
+$sidebar.Controls.Add($script:VersionLabel)
 
 # Основная область
 $main = New-Object System.Windows.Forms.Panel
@@ -859,6 +1074,27 @@ $script:TitleLabel.Font = New-Object System.Drawing.Font('Segoe UI', 13, [System
 $script:TitleLabel.Location = New-Object System.Drawing.Point(22, 12)
 $script:TitleLabel.Size = New-Object System.Drawing.Size(620, 32)
 $header.Controls.Add($script:TitleLabel)
+
+$script:ModelCombo = New-Object System.Windows.Forms.ComboBox
+$script:ModelCombo.Location = New-Object System.Drawing.Point(650, 13)
+$script:ModelCombo.Size = New-Object System.Drawing.Size(178, 28)
+$script:ModelCombo.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
+$script:ModelCombo.BackColor = $script:PanelBg
+$script:ModelCombo.ForeColor = $script:TextColor
+$script:ModelCombo.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+$script:ModelCombo.Cursor = [System.Windows.Forms.Cursors]::Hand
+foreach ($m in @(Get-LocalModels)) { [void]$script:ModelCombo.Items.Add([string]$m) }
+if (-not $script:ModelCombo.Items.Contains([string]$script:Config.chatModel)) {
+    [void]$script:ModelCombo.Items.Add([string]$script:Config.chatModel)
+}
+$script:ModelCombo.SelectedItem = [string]$script:Config.chatModel
+$script:ModelCombo.add_SelectedIndexChanged({
+    $script:Config.chatModel = [string]$script:ModelCombo.SelectedItem
+    Save-WellConfig $script:Config
+    $script:VersionLabel.Text = 'v' + $script:AppVersion + '  ·  ' + $script:Config.chatModel
+    Set-Status ('Модель: ' + $script:Config.chatModel) $script:Green
+})
+$header.Controls.Add($script:ModelCombo)
 
 $script:SettingsButton = New-Button '⚙  Настройки' 838 12 145 34 $false
 $header.Controls.Add($script:SettingsButton)
