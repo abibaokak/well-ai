@@ -8,7 +8,7 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 $script:AppName    = 'Well AI'
-$script:AppVersion = '1.0.0'
+$script:AppVersion = '1.0.1'
 $script:ConfigDir  = Join-Path $env:APPDATA 'Well AI'
 $script:ConfigPath = Join-Path $script:ConfigDir 'config.json'
 $script:HistoryPath= Join-Path $script:ConfigDir 'history.json'
@@ -28,9 +28,10 @@ $script:DefaultSystemPrompt = @'
 '@
 
 $script:DefaultConfig = @{
-    apiBase      = 'https://api.openai.com/v1'
+    apiBase      = 'http://127.0.0.1:11434/v1'
+    imageApiBase = 'https://api.openai.com/v1'
     apiKey       = ''
-    chatModel    = 'gpt-4o-mini'
+    chatModel    = 'qwen2.5-coder:3b'
     imageModel   = 'gpt-image-1'
     imageSize    = '1024x1024'
     temperature  = 0.7
@@ -126,8 +127,12 @@ function Set-Busy {
 }
 
 function Test-ApiKey {
-    if ([string]::IsNullOrWhiteSpace($script:Config.apiKey)) {
-        Add-ChatLine 'Well AI: ' 'Сначала введите API-ключ: меню «Настройки» или кнопка «⚙». Ключ хранится только локально.' ([System.Drawing.Color]::FromArgb(190, 90, 40))
+    param([bool]$ForImages = $false)
+
+    $base = if ($ForImages) { [string]$script:Config.imageApiBase } else { [string]$script:Config.apiBase }
+    $isLocal = $base -match '^https?://(127\.0\.0\.1|localhost)'
+    if ([string]::IsNullOrWhiteSpace($script:Config.apiKey) -and -not $isLocal) {
+        Add-ChatLine 'Well AI: ' 'Для этого API нужен ключ: меню «Настройки» или кнопка «⚙». Локальная модель Ollama работает без ключа.' ([System.Drawing.Color]::FromArgb(190, 90, 40))
         Set-Status 'Нет API-ключа' ([System.Drawing.Color]::FromArgb(190, 90, 40))
         return $false
     }
@@ -197,7 +202,7 @@ function Start-ChatRequest {
 function Start-ImageRequest {
     param([string]$Prompt)
 
-    if (-not (Test-ApiKey)) { return }
+    if (-not (Test-ApiKey -ForImages $true)) { return }
     if ([string]::IsNullOrWhiteSpace($Prompt)) {
         Add-ChatLine 'Well AI: ' 'Напишите, какую картинку сгенерировать, например: «кошмарный бургер в стиле пиксель-арт».' ([System.Drawing.Color]::FromArgb(190, 90, 40))
         return
@@ -237,7 +242,7 @@ function Start-ImageRequest {
             'Content-Type' = 'application/json'
         }
         try {
-            $resp = Invoke-RestMethod -Method Post -Uri ([string]$data.config.apiBase + '/images/generations') -Headers $headers -Body $body -ContentType 'application/json' -TimeoutSec 240
+            $resp = Invoke-RestMethod -Method Post -Uri ([string]$data.config.imageApiBase + '/images/generations') -Headers $headers -Body $body -ContentType 'application/json' -TimeoutSec 240
             $item = $resp.data[0]
             if ($item.b64_json) {
                 $bytes = [Convert]::FromBase64String([string]$item.b64_json)
@@ -324,42 +329,45 @@ function Show-SettingsDialog {
     $form = New-Object System.Windows.Forms.Form
     $form.Text = 'Well AI — настройки'
     $form.StartPosition = 'CenterScreen'
-    $form.Size = New-Object System.Drawing.Size(700, 620)
+    $form.Size = New-Object System.Drawing.Size(700, 665)
     $form.MinimumSize = $form.Size
     $form.FormBorderStyle = 'FixedDialog'
 
-    $form.Controls.Add((New-Label 'API Base (OpenAI-совместимый)' 20 20 300))
+    $form.Controls.Add((New-Label 'API Base для чата (локальная модель)' 20 20 360))
     $tbBase = New-TextBox ([string]$script:Config.apiBase) 20 45 640
 
-    $form.Controls.Add((New-Label 'API-ключ' 20 85 300))
-    $tbKey = New-TextBox ([string]$script:Config.apiKey) 20 110 640 24 $true
+    $form.Controls.Add((New-Label 'API Base для картинок' 20 78 360))
+    $tbImageBase = New-TextBox ([string]$script:Config.imageApiBase) 20 103 640
 
-    $form.Controls.Add((New-Label 'Модель для чата' 20 150 200))
-    $tbChat = New-TextBox ([string]$script:Config.chatModel) 200 147 460
+    $form.Controls.Add((New-Label 'API-ключ (нужен только для картинок)' 20 140 360))
+    $tbKey = New-TextBox ([string]$script:Config.apiKey) 20 165 640 24 $true
 
-    $form.Controls.Add((New-Label 'Модель для картинок' 20 182 200))
-    $tbImage = New-TextBox ([string]$script:Config.imageModel) 200 179 460
+    $form.Controls.Add((New-Label 'Модель для чата' 20 200 200))
+    $tbChat = New-TextBox ([string]$script:Config.chatModel) 200 197 460
 
-    $form.Controls.Add((New-Label 'Размер картинки' 20 214 200))
+    $form.Controls.Add((New-Label 'Модель для картинок' 20 232 200))
+    $tbImage = New-TextBox ([string]$script:Config.imageModel) 200 229 460
+
+    $form.Controls.Add((New-Label 'Размер картинки' 20 264 200))
     $cbSize = New-Object System.Windows.Forms.ComboBox
-    $cbSize.Location = New-Object System.Drawing.Point(200, 211)
+    $cbSize.Location = New-Object System.Drawing.Point(200, 261)
     $cbSize.Size = New-Object System.Drawing.Size(220, 24)
     $cbSize.DropDownStyle = [System.Windows.Forms.ComboBoxStyle]::DropDownList
     @('1024x1024', '1536x1024', '1024x1536', '1792x1024', '1024x1792') | ForEach-Object { [void]$cbSize.Items.Add($_) }
     if ($cbSize.Items.Contains([string]$script:Config.imageSize)) { $cbSize.SelectedItem = [string]$script:Config.imageSize } else { $cbSize.SelectedIndex = 0 }
 
-    $form.Controls.Add((New-Label 'Temperature' 20 248 200))
-    $tbTemp = New-TextBox ([string]$script:Config.temperature) 200 245 100
+    $form.Controls.Add((New-Label 'Temperature' 20 298 200))
+    $tbTemp = New-TextBox ([string]$script:Config.temperature) 200 295 100
 
-    $form.Controls.Add((New-Label 'Max tokens' 330 248 200))
-    $tbMax = New-TextBox ([string]$script:Config.maxTokens) 440 245 100
+    $form.Controls.Add((New-Label 'Max tokens' 330 298 200))
+    $tbMax = New-TextBox ([string]$script:Config.maxTokens) 440 295 100
 
-    $form.Controls.Add((New-Label 'Системный промпт' 20 282 300))
-    $tbPrompt = New-TextBox ([string]$script:Config.systemPrompt) 20 307 640 180 $false $true
+    $form.Controls.Add((New-Label 'Системный промпт' 20 332 300))
+    $tbPrompt = New-TextBox ([string]$script:Config.systemPrompt) 20 357 640 160 $false $true
 
     $cbHistory = New-Object System.Windows.Forms.CheckBox
     $cbHistory.Text = 'Сохранять историю диалога локально'
-    $cbHistory.Location = New-Object System.Drawing.Point(20, 500)
+    $cbHistory.Location = New-Object System.Drawing.Point(20, 530)
     $cbHistory.Size = New-Object System.Drawing.Size(400, 24)
     $cbHistory.Checked = [bool]$script:Config.saveHistory
     $form.Controls.Add($cbHistory)
@@ -367,14 +375,14 @@ function Show-SettingsDialog {
     $btnSave = New-Object System.Windows.Forms.Button
     $btnSave.Text = 'Сохранить'
     $btnSave.DialogResult = [System.Windows.Forms.DialogResult]::OK
-    $btnSave.Location = New-Object System.Drawing.Point(390, 535)
+    $btnSave.Location = New-Object System.Drawing.Point(390, 565)
     $btnSave.Size = New-Object System.Drawing.Size(125, 34)
     $form.Controls.Add($btnSave)
 
     $btnCancel = New-Object System.Windows.Forms.Button
     $btnCancel.Text = 'Отмена'
     $btnCancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
-    $btnCancel.Location = New-Object System.Drawing.Point(535, 535)
+    $btnCancel.Location = New-Object System.Drawing.Point(535, 565)
     $btnCancel.Size = New-Object System.Drawing.Size(125, 34)
     $form.Controls.Add($btnCancel)
 
@@ -383,6 +391,7 @@ function Show-SettingsDialog {
 
     if ($form.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         $script:Config.apiBase      = $tbBase.Text.Trim()
+        $script:Config.imageApiBase = $tbImageBase.Text.Trim()
         $script:Config.apiKey       = $tbKey.Text.Trim()
         $script:Config.chatModel    = $tbChat.Text.Trim()
         $script:Config.imageModel   = $tbImage.Text.Trim()
@@ -587,7 +596,7 @@ foreach ($m in $script:History) {
     }
 }
 if ([string]::IsNullOrWhiteSpace($script:Config.apiKey)) {
-    Set-Status 'Нужно указать API-ключ' ([System.Drawing.Color]::FromArgb(190, 90, 40))
+    Set-Status ('Локальная модель: ' + [string]$script:Config.chatModel) ([System.Drawing.Color]::FromArgb(40, 130, 90))
 }
 
 [System.Windows.Forms.Application]::EnableVisualStyles()

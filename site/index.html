@@ -104,18 +104,18 @@
   <div class="wrap">
     <header>
       <div class="logo"><div class="logo-mark">W</div> Well AI</div>
-      <div class="badge">v1.0.0 · Windows 10/11</div>
+      <div class="badge">v1.0.1 · Windows 10/11 · локальная модель</div>
     </header>
 
     <div class="hero">
       <h1>Твой локальный<br><span>Well AI</span></h1>
-      <p>Чатбот, который умеет писать код, объяснять решения и генерировать картинки. Ставится на Windows одним кликом, работает через твой API-ключ и хранит историю только у тебя.</p>
+      <p>Чатбот, который умеет писать код, объяснять решения и генерировать картинки. По умолчанию отвечает локальной моделью <code>qwen2.5-coder:3b</code> через Ollama — без API-ключа и без интернета. История хранится только у тебя.</p>
       <div class="buttons">
-        <a class="btn btn-primary" href="https://github.com/abibaokak/well-ai/releases/download/v1.0.0/WellAI-Setup.exe">⬇ Скачать установщик .exe</a>
-        <a class="btn btn-secondary" href="https://github.com/abibaokak/well-ai/releases/download/v1.0.0/WellAI-portable.zip">📦 Портативная версия .zip</a>
+        <a class="btn btn-primary" href="https://github.com/abibaokak/well-ai/releases/download/v1.0.1/WellAI-Setup.exe">⬇ Скачать установщик .exe</a>
+        <a class="btn btn-secondary" href="https://github.com/abibaokak/well-ai/releases/download/v1.0.1/WellAI-portable.zip">📦 Портативная версия .zip</a>
         <a class="btn btn-secondary" href="https://github.com/abibaokak/well-ai">Исходный код на GitHub</a>
       </div>
-      <div class="meta">SHA-256 установщика: <code>E16B5359973E580843D1525929562C8064B7DDEE160B0697F82F6BD3D5E0043E</code></div>
+      <div class="meta">SHA-256 установщика: <code>E080EDF51FEB8C248375ECB975B8F7071F74E39CCFB4D1A4A7FFC96F5855F6D1</code></div>
     </div>
 
     <div class="grid">
@@ -129,14 +129,14 @@
       <h2>Как начать</h2>
       <div class="steps">
         <div class="step"><b>Скачай и запусти установщик</b><span>Программа появится в меню «Пуск» и на рабочем столе.</span></div>
-        <div class="step"><b>Открой «Настройки»</b><span>Вставь API-ключ OpenAI или другого OpenAI-совместимого провайдера.</span></div>
-        <div class="step"><b>Общайся</b><span>Enter — отправить, Shift+Enter — новая строка, кнопка «Картинка» — генерация изображения.</span></div>
+        <div class="step"><b>Убедись, что Ollama запущена</b><span>Локальная модель <code>qwen2.5-coder:3b</code> уже загружена на этом ПК. Ключ для чата не нужен.</span></div>
+        <div class="step"><b>Общайся</b><span>Enter — отправить, Shift+Enter — новая строка. Для картинок вставь API-ключ в настройках.</span></div>
       </div>
     </section>
 
     <section>
       <h2>Вопросы</h2>
-      <details><summary>Какой API нужен?</summary><p>По умолчанию используется <code>https://api.openai.com/v1</code> с моделями <code>gpt-4o-mini</code> и <code>gpt-image-1</code>. В настройках можно указать другой base URL и другие модели, если провайдер совместим с OpenAI API.</p></details>
+      <details><summary>Нужен ли API-ключ?</summary><p>Для чата — нет: по умолчанию используется локальная модель <code>qwen2.5-coder:3b</code> через Ollama на <code>http://127.0.0.1:11434/v1</code>. Для генерации картинок нужен ключ OpenAI (поле «API-ключ» и «API Base для картинок»).</p></details>
       <details><summary>Где хранится ключ?</summary><p>В файле <code>%APPDATA%\Well AI\config.json</code>. Не публикуй этот файл. Удаление настроек предлагается при uninstall.</p></details>
       <details><summary>Почему картинка не генерируется?</summary><p>Проверь, что у ключа есть доступ к выбранной модели картинок. Для OpenAI попробуй <code>gpt-image-1</code> или <code>dall-e-3</code> и разрешённый размер.</p></details>
       <details><summary>Как обновить?</summary><p>Скачай новый установщик и запусти его — он перезапишет файлы программы, сохранив настройки и историю.</p></details>
