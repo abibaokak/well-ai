@@ -32,7 +32,7 @@ public class WellAiJsBridge
 "@ -ReferencedAssemblies 'System.Windows.Forms'
 
 $script:AppName    = 'Well AI'
-$script:AppVersion = '1.3.0'
+$script:AppVersion = '1.4.0'
 $script:ConfigDir  = Join-Path $env:APPDATA 'Well AI'
 $script:ConfigPath = Join-Path $script:ConfigDir 'config.json'
 $script:ChatsDir   = Join-Path $script:ConfigDir 'chats'
@@ -40,15 +40,17 @@ $script:HistoryPath= Join-Path $script:ConfigDir 'history.json'
 $script:ImagesDir  = Join-Path ([Environment]::GetFolderPath('MyPictures')) 'Well AI'
 $script:InstallDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-$script:Bg        = [System.Drawing.Color]::FromArgb(13, 17, 28)
-$script:SidebarBg = [System.Drawing.Color]::FromArgb(20, 26, 42)
-$script:PanelBg   = [System.Drawing.Color]::FromArgb(24, 31, 50)
-$script:TextColor = [System.Drawing.Color]::FromArgb(232, 237, 248)
-$script:MutedColor= [System.Drawing.Color]::FromArgb(138, 151, 181)
-$script:Accent    = [System.Drawing.Color]::FromArgb(65, 130, 255)
-$script:Accent2   = [System.Drawing.Color]::FromArgb(125, 105, 255)
-$script:Green     = [System.Drawing.Color]::FromArgb(62, 207, 142)
-$script:Red       = [System.Drawing.Color]::FromArgb(240, 90, 90)
+$script:Bg        = [System.Drawing.Color]::FromArgb(10, 15, 30)
+$script:SidebarBg = [System.Drawing.Color]::FromArgb(15, 21, 39)
+$script:PanelBg   = [System.Drawing.Color]::FromArgb(22, 30, 53)
+$script:TextColor = [System.Drawing.Color]::FromArgb(232, 238, 249)
+$script:MutedColor= [System.Drawing.Color]::FromArgb(139, 157, 190)
+$script:Accent    = [System.Drawing.Color]::FromArgb(61, 220, 186)
+$script:Accent2   = [System.Drawing.Color]::FromArgb(139, 123, 255)
+$script:Gold      = [System.Drawing.Color]::FromArgb(255, 196, 107)
+$script:Green     = [System.Drawing.Color]::FromArgb(61, 220, 186)
+$script:Red       = [System.Drawing.Color]::FromArgb(242, 109, 109)
+$script:OnAccent  = [System.Drawing.Color]::FromArgb(8, 19, 31)
 
 $script:DefaultSystemPrompt = @'
 Ты Well AI — дружелюбный, грамотный чат-ассистент, который работает локально на компьютере пользователя.
@@ -209,10 +211,10 @@ function Refresh-ChatButtons {
         $btn.Height = 46
         $btn.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
         $btn.FlatAppearance.BorderSize = 0
-        $btn.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(36, 48, 76)
-        $btn.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(45, 90, 165)
-        $btn.BackColor = if ([string]$data.id -eq [string]$script:CurrentChatId) { $script:PanelBg } else { $script:SidebarBg }
-        $btn.ForeColor = $script:TextColor
+        $btn.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(34, 51, 80)
+        $btn.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(27, 41, 66)
+        $btn.BackColor = if ([string]$data.id -eq [string]$script:CurrentChatId) { [System.Drawing.Color]::FromArgb(29, 43, 72) } else { $script:SidebarBg }
+        $btn.ForeColor = if ([string]$data.id -eq [string]$script:CurrentChatId) { $script:Accent } else { $script:TextColor }
         $btn.Font = New-Object System.Drawing.Font('Segoe UI', 9)
         $btn.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
         $btn.Padding = New-Object System.Windows.Forms.Padding(12, 0, 8, 0)
@@ -314,40 +316,43 @@ function Add-BrowserMessage {
 function Get-ChatTemplate {
     return @'
 <html><head><meta charset="utf-8"><style>
-html,body{margin:0;padding:0;height:100%;color:#e9eefb;font-family:'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.58;background:#0d111c}
-body{background:linear-gradient(155deg,#121c34 0%,#0d111c 42%,#111428 100%)}
-#chat{max-width:900px;margin:0 auto;padding:30px 34px 40px 34px}
-.empty{text-align:center;padding:80px 20px 40px 20px}
-.logo{width:74px;height:74px;line-height:74px;margin:0 auto 20px auto;border-radius:22px;font-size:34px;font-weight:800;color:#fff;background:linear-gradient(135deg,#4182ff,#7d69ff);box-shadow:0 18px 45px rgba(65,130,255,.32)}
-.empty h1{margin:0 0 8px 0;font-size:30px;font-weight:700;letter-spacing:-.5px}
-.empty .sub{color:#94a3c4;font-size:15px;margin-bottom:30px}
-.chips{width:100%;max-width:660px;margin:0 auto}
-.chip{display:inline-block;margin:5px;padding:11px 16px;border-radius:12px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);color:#cdd8f2;cursor:pointer;font-size:13px}
-.chip:hover{background:rgba(65,130,255,.16);border-color:rgba(65,130,255,.5);color:#fff}
-.row{display:table;width:100%;margin:0 0 20px 0}
-.ava-cell{display:table-cell;width:46px;vertical-align:top;padding-top:2px}
-.bub-cell{display:table-cell;vertical-align:top;width:100%}
+html,body{margin:0;padding:0;height:100%;color:#e8eef9;font-family:'Segoe UI',Arial,sans-serif;font-size:14px;line-height:1.6;background:#0a0f1e}
+body{background:radial-gradient(circle at 10% 5%,rgba(61,220,186,.13),transparent 32%),radial-gradient(circle at 92% 2%,rgba(139,123,255,.17),transparent 30%),linear-gradient(160deg,#0d1426 0%,#0a0f1e 45%,#0c1122 100%);background-attachment:fixed}
+#chat{max-width:880px;margin:0 auto;padding:34px 38px 56px 38px}
+.empty{text-align:center;padding:74px 20px 44px 20px}
+.mark{width:76px;height:76px;line-height:76px;margin:0 auto 22px auto;border-radius:24px;font-size:36px;font-weight:800;letter-spacing:-2px;color:#08131f;background:linear-gradient(135deg,#3ddcba 0%,#6f8dff 58%,#a878ff 100%);box-shadow:0 20px 55px rgba(61,220,186,.22),inset 0 1px 0 rgba(255,255,255,.45)}
+.empty h1{margin:0 0 10px 0;font-size:32px;font-weight:700;letter-spacing:-1px}
+.empty .sub{color:#93a3c1;font-size:15px;margin-bottom:32px}
+.chips{width:100%;max-width:700px;margin:0 auto}
+.chip{display:inline-block;margin:6px;padding:12px 18px;border-radius:14px;background:rgba(255,255,255,.045);border:1px solid rgba(139,123,255,.28);color:#d3dcf0;cursor:pointer;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+.chip:hover{background:rgba(61,220,186,.1);border-color:rgba(61,220,186,.55);color:#fff}
+.row{display:table;width:100%;margin:0 0 22px 0}
 .msg.user .row{direction:rtl}
-.msg.user .ava-cell,.msg.user .bub-cell{direction:ltr}
-.avatar{width:32px;height:32px;line-height:32px;text-align:center;border-radius:50%;font-size:13px;font-weight:800;color:#fff;display:inline-block}
-.msg.assistant .avatar{background:linear-gradient(135deg,#4182ff,#7d69ff);box-shadow:0 6px 18px rgba(65,130,255,.28)}
-.msg.user .avatar{background:linear-gradient(135deg,#2f3c5c,#41527d);box-shadow:0 6px 18px rgba(0,0,0,.25)}
-.bubble{display:inline-block;max-width:82%;padding:13px 17px;border-radius:16px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09);box-shadow:0 10px 28px rgba(0,0,0,.22);word-wrap:break-word;overflow-wrap:break-word}
-.msg.user .bubble{background:linear-gradient(135deg,#3b7cff,#4168e8);border-color:rgba(255,255,255,.16);color:#fff;border-top-right-radius:5px}
-.msg.assistant .bubble{border-top-left-radius:5px}
-pre{margin:9px 0 5px 0;background:#080d18;border:1px solid #26314d;border-radius:0 0 10px 10px;padding:12px 14px;overflow:auto;white-space:pre-wrap;word-wrap:break-word;font-family:Consolas,'Courier New',monospace;font-size:13px;color:#d8e4ff}
+.ava-cell{display:table-cell;width:48px;vertical-align:top;padding-top:18px}
+.bub-cell{display:table-cell;vertical-align:top;width:100%}
+.ava-cell,.bub-cell{direction:ltr}
+.avatar{width:34px;height:34px;line-height:34px;text-align:center;border-radius:11px;font-size:13px;font-weight:800;color:#08131f;display:inline-block}
+.msg.assistant .avatar{background:linear-gradient(135deg,#3ddcba,#7b8dff);box-shadow:0 8px 22px rgba(61,220,186,.24)}
+.msg.user .avatar{background:linear-gradient(135deg,#38496e,#5b6d9b);color:#dfe8ff;box-shadow:0 8px 20px rgba(0,0,0,.26)}
+.who{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:#6f82a8;font-weight:700;margin:0 0 7px 2px}
+.msg.user .who{text-align:right;margin-right:2px;color:#5fbbab}
+.bubble{display:inline-block;max-width:84%;padding:15px 18px;border-radius:18px;word-wrap:break-word;overflow-wrap:break-word}
+.msg.assistant .bubble{background:linear-gradient(180deg,rgba(29,39,66,.94),rgba(20,28,49,.96));border:1px solid rgba(139,123,255,.2);border-left:3px solid #3ddcba;border-top-left-radius:6px;box-shadow:0 16px 36px rgba(0,0,0,.26)}
+.msg.user .bubble{background:linear-gradient(135deg,rgba(61,220,186,.18),rgba(123,141,255,.16));border:1px solid rgba(61,220,186,.3);border-top-right-radius:6px;color:#eef7ff}
+.codewrap{margin:12px 0 6px 0;border:1px solid rgba(139,123,255,.24);border-radius:12px;overflow:hidden;background:#080d1a}
+.codebar{height:32px;line-height:32px;padding:0 11px;background:linear-gradient(90deg,#1a2647,#151d35);border-bottom:1px solid rgba(255,255,255,.06);font-size:11px;color:#9fb2d6;text-transform:uppercase;letter-spacing:.7px}
+.codebar .lang{color:#3ddcba;font-weight:700}
+.copy{float:right;margin-top:5px;padding:2px 10px;border-radius:7px;border:1px solid rgba(61,220,186,.35);background:rgba(61,220,186,.1);color:#a9f0df;font-size:11px;cursor:pointer}
+.copy:hover{background:rgba(61,220,186,.2);color:#fff}
+pre{margin:0;padding:13px 15px;background:transparent;border:0;border-radius:0;overflow:auto;white-space:pre-wrap;word-wrap:break-word;font-family:Consolas,'Courier New',monospace;font-size:13px;color:#dce7fb;line-height:1.5}
 code{font-family:Consolas,'Courier New',monospace}
-.codewrap{margin:11px 0 6px 0;border:1px solid #26314d;border-radius:10px;overflow:hidden;background:#080d18}
-.codebar{height:31px;line-height:31px;padding:0 10px;background:#18223a;border-bottom:1px solid #26314d;font-size:11px;color:#8fa2c8;text-transform:uppercase;letter-spacing:.6px}
-.copy{float:right;margin-top:5px;padding:2px 9px;border-radius:6px;border:1px solid #344367;background:#222e4d;color:#c8d6f5;font-size:11px;cursor:pointer}
-.copy:hover{background:#2c3d68;color:#fff}
-img{max-width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.12);display:block;margin-top:6px}
-.meta{font-size:11px;color:#8797ba;margin-top:7px}
-.typing{display:inline-block;padding:14px 18px;border-radius:16px;background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.09)}
-.dot{display:inline-block;width:7px;height:7px;margin:0 3px;border-radius:50%;background:#7d93c4;animation:pulse 1.1s infinite}
+img{max-width:100%;border-radius:12px;border:1px solid rgba(61,220,186,.25);display:block;margin-top:8px}
+.meta{font-size:11px;color:#7184a8;margin-top:9px;padding-left:9px;border-left:2px solid rgba(139,123,255,.35)}
+.typing{display:inline-block;padding:14px 18px;border-radius:16px;border-top-left-radius:6px;background:linear-gradient(180deg,rgba(29,39,66,.94),rgba(20,28,49,.96));border:1px solid rgba(139,123,255,.2);border-left:3px solid #3ddcba}
+.dot{display:inline-block;width:7px;height:7px;margin:0 3px;border-radius:50%;background:#3ddcba;box-shadow:0 0 8px rgba(61,220,186,.55);animation:pulse 1.1s infinite}
 .dot.d2{animation-delay:.18s}.dot.d3{animation-delay:.36s}
-@keyframes pulse{0%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}100%{opacity:.3;transform:translateY(0)}}
-.cursor{display:inline-block;width:7px;height:15px;margin-left:2px;vertical-align:-2px;background:#7d9dff;border-radius:2px;animation:blink .8s steps(2) infinite}
+@keyframes pulse{0%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}100%{opacity:.25;transform:translateY(0)}}
+.cursor{display:inline-block;width:7px;height:15px;margin-left:2px;vertical-align:-2px;background:#3ddcba;border-radius:2px;box-shadow:0 0 9px rgba(61,220,186,.6);animation:blink .8s steps(2) infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
 </style></head><body>
 <div id="chat"></div>
@@ -355,7 +360,7 @@ img{max-width:100%;border-radius:12px;border:1px solid rgba(255,255,255,.12);dis
 function scrollBottom(){window.scrollTo(0,document.body.scrollHeight)}
 function renderEmpty(){
  var c=document.getElementById('chat');
- c.innerHTML='<div class="empty" id="empty"><div class="logo">W</div><h1>Well AI</h1>'+
+ c.innerHTML='<div class="empty" id="empty"><div class="mark">W</div><h1>Well AI</h1>'+
  '<div class="sub">Локальная модель, код и картинки. С чего начнём?</div><div class="chips">'+
  '<div class="chip" onclick="window.external.UsePrompt(\'Напиши PowerShell-скрипт, который выводит Hello World\')">Напиши скрипт</div>'+
  '<div class="chip" onclick="window.external.UsePrompt(\'Объясни этот код простыми словами\')">Объясни код</div>'+
@@ -369,7 +374,7 @@ function decorateCode(bub){
   var pre=pres[i]; var lang=pre.getAttribute('data-lang')||'код';
   var wrap=document.createElement('div'); wrap.className='codewrap';
   var bar=document.createElement('div'); bar.className='codebar';
-  var lab=document.createElement('span'); lab.innerHTML=lang; bar.appendChild(lab);
+  var lab=document.createElement('span'); lab.className='lang'; lab.innerHTML=lang; bar.appendChild(lab);
   var btn=document.createElement('button'); btn.className='copy'; btn.innerHTML='Копировать';
   btn.onclick=function(){
    var code=this.parentNode.parentNode.getElementsByTagName('code')[0].innerText;
@@ -386,6 +391,7 @@ function addMessage(role,html,meta){
  var ac=document.createElement('div'); ac.className='ava-cell';
  var av=document.createElement('div'); av.className='avatar'; av.innerHTML=(role==='user')?'В':'W'; ac.appendChild(av);
  var bc=document.createElement('div'); bc.className='bub-cell';
+ var w=document.createElement('div'); w.className='who'; w.innerHTML=(role==='user')?'вы':'well ai'; bc.appendChild(w);
  var bub=document.createElement('div'); bub.className='bubble'; bub.innerHTML=html;
  decorateCode(bub);
  if(meta){var m=document.createElement('div');m.className='meta';m.innerHTML=meta;bub.appendChild(m)}
@@ -401,6 +407,7 @@ function showTyping(){
  var ac=document.createElement('div');ac.className='ava-cell';
  var av=document.createElement('div');av.className='avatar';av.innerHTML='W';ac.appendChild(av);
  var bc=document.createElement('div');bc.className='bub-cell';
+ var w=document.createElement('div');w.className='who';w.innerHTML='well ai';bc.appendChild(w);
  var t=document.createElement('div');t.className='typing';
  t.innerHTML='<span class="dot"></span><span class="dot d2"></span><span class="dot d3"></span>';
  bc.appendChild(t);row.appendChild(ac);row.appendChild(bc);wrap.appendChild(row);
@@ -415,6 +422,7 @@ function beginStream(){
  var ac=document.createElement('div');ac.className='ava-cell';
  var av=document.createElement('div');av.className='avatar';av.innerHTML='W';ac.appendChild(av);
  var bc=document.createElement('div');bc.className='bub-cell';
+ var w=document.createElement('div');w.className='who';w.innerHTML='well ai';bc.appendChild(w);
  var bub=document.createElement('div');bub.className='bubble';bub.id='streambubble';
  bub.innerHTML='<span class="cursor"></span>';
  bc.appendChild(bub);row.appendChild(ac);row.appendChild(bc);wrap.appendChild(row);
@@ -539,9 +547,9 @@ function New-Button {
     $b.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
     $b.FlatAppearance.BorderSize = 0
     $b.BackColor = if ($Primary) { $script:Accent } else { $script:PanelBg }
-    $b.ForeColor = if ($Primary) { [System.Drawing.Color]::White } else { $script:TextColor }
-    $b.FlatAppearance.MouseOverBackColor = if ($Primary) { [System.Drawing.Color]::FromArgb(86, 150, 255) } else { [System.Drawing.Color]::FromArgb(36, 48, 76) }
-    $b.FlatAppearance.MouseDownBackColor = if ($Primary) { [System.Drawing.Color]::FromArgb(48, 106, 220) } else { [System.Drawing.Color]::FromArgb(30, 40, 64) }
+    $b.ForeColor = if ($Primary) { $script:OnAccent } else { $script:TextColor }
+    $b.FlatAppearance.MouseOverBackColor = if ($Primary) { [System.Drawing.Color]::FromArgb(94, 238, 206) } else { [System.Drawing.Color]::FromArgb(34, 51, 80) }
+    $b.FlatAppearance.MouseDownBackColor = if ($Primary) { [System.Drawing.Color]::FromArgb(43, 192, 163) } else { [System.Drawing.Color]::FromArgb(27, 41, 66) }
     $b.Font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
     $b.Cursor = [System.Windows.Forms.Cursors]::Hand
     return $b
@@ -1013,12 +1021,22 @@ $sidebar.Width = 258
 $sidebar.BackColor = $script:SidebarBg
 $form.Controls.Add($sidebar)
 
+$logoMark = New-Object System.Windows.Forms.Label
+$logoMark.Text = 'W'
+$logoMark.ForeColor = $script:OnAccent
+$logoMark.BackColor = $script:Accent
+$logoMark.Font = New-Object System.Drawing.Font('Segoe UI', 17, [System.Drawing.FontStyle]::Bold)
+$logoMark.Location = New-Object System.Drawing.Point(18, 16)
+$logoMark.Size = New-Object System.Drawing.Size(38, 38)
+$logoMark.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+$sidebar.Controls.Add($logoMark)
+
 $logo = New-Object System.Windows.Forms.Label
-$logo.Text = 'W  Well AI'
+$logo.Text = 'Well AI'
 $logo.ForeColor = [System.Drawing.Color]::White
 $logo.Font = New-Object System.Drawing.Font('Segoe UI', 18, [System.Drawing.FontStyle]::Bold)
-$logo.Location = New-Object System.Drawing.Point(18, 18)
-$logo.Size = New-Object System.Drawing.Size(220, 38)
+$logo.Location = New-Object System.Drawing.Point(64, 18)
+$logo.Size = New-Object System.Drawing.Size(180, 38)
 $sidebar.Controls.Add($logo)
 
 $subtitle = New-Object System.Windows.Forms.Label
@@ -1066,6 +1084,12 @@ $accentStrip.Dock = [System.Windows.Forms.DockStyle]::Top
 $accentStrip.Height = 3
 $accentStrip.BackColor = $script:Accent
 $header.Controls.Add($accentStrip)
+
+$accentGlow = New-Object System.Windows.Forms.Panel
+$accentGlow.Location = New-Object System.Drawing.Point(0, 3)
+$accentGlow.Size = New-Object System.Drawing.Size(330, 2)
+$accentGlow.BackColor = $script:Gold
+$header.Controls.Add($accentGlow)
 
 $script:TitleLabel = New-Object System.Windows.Forms.Label
 $script:TitleLabel.Text = 'Новый чат'
@@ -1118,7 +1142,7 @@ while ($script:Browser.ReadyState -ne [System.Windows.Forms.WebBrowserReadyState
 
 $script:StatusLabel = New-Object System.Windows.Forms.Label
 $script:StatusLabel.Text = 'Готов'
-$script:StatusLabel.ForeColor = $script:MutedColor
+$script:StatusLabel.ForeColor = $script:Accent
 $script:StatusLabel.Font = New-Object System.Drawing.Font('Segoe UI', 8)
 $script:StatusLabel.Location = New-Object System.Drawing.Point(22, 82)
 $script:StatusLabel.Size = New-Object System.Drawing.Size(420, 18)
@@ -1130,6 +1154,12 @@ $inputPanel.Dock = [System.Windows.Forms.DockStyle]::Bottom
 $inputPanel.Height = 124
 $inputPanel.BackColor = $script:SidebarBg
 $main.Controls.Add($inputPanel)
+
+$inputLine = New-Object System.Windows.Forms.Panel
+$inputLine.Dock = [System.Windows.Forms.DockStyle]::Top
+$inputLine.Height = 2
+$inputLine.BackColor = $script:Accent2
+$inputPanel.Controls.Add($inputLine)
 
 $script:AttachButton = New-Button '📎  Файл' 18 16 110 34 $false
 $inputPanel.Controls.Add($script:AttachButton)
